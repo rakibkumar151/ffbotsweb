@@ -86,6 +86,34 @@ body {
   letter-spacing: 1px;
 }
 
+/* Status Bar */
+.status-bar {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.4rem 1rem;
+  border-radius: 20px;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  gap: 0.6rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.status-dot.offline {
+  background: var(--danger);
+}
+
 /* Glassmorphism */
 .glass-panel {
   background: var(--panel-bg);
@@ -412,3 +440,92 @@ input[type="text"]:focus {
 ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+/* Features Panel */
+.features-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.feature-group {
+  margin-bottom: 0.5rem;
+}
+
+.feature-group label {
+  display: block;
+  margin-bottom: 0.8rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.button-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.action-btn.start {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.action-btn.start:hover:not(:disabled) {
+  background: var(--success);
+  color: black;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+}
+
+.action-btn.stop {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.action-btn.stop:hover:not(:disabled) {
+  background: var(--danger);
+  color: black;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+.grid-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.8rem;
+}
+
+.num-btn {
+  padding: 0.8rem 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: white;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.num-btn:hover:not(:disabled) {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.3);
+}
+
+.num-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

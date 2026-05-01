@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 import { EMOTES } from './emotesData';
 
@@ -7,6 +7,24 @@ function App() {
   const [targetUid, setTargetUid] = useState('');
   const [logs, setLogs] = useState([]);
   const [loadingEmote, setLoadingEmote] = useState(null);
+  const [isAutoStarting, setIsAutoStarting] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [botCount, setBotCount] = useState(0);
+
+  useEffect(() => {
+    const fetchBots = async () => {
+      try {
+        const res = await fetch('https://ffbots-1.onrender.com/api/bots');
+        const data = await res.json();
+        if (data.bots) setBotCount(data.bots.length);
+      } catch (e) {
+        console.error("Bot check failed", e);
+      }
+    };
+    fetchBots();
+    const interval = setInterval(fetchBots, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const addLog = (msg, type = 'info') => {
     setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
@@ -48,6 +66,54 @@ function App() {
     }
   };
 
+  const handleAutoStart = async (action) => {
+    if (action === 'start' && !teamCode) {
+      addLog('Error: Team Code required for Auto Start!', 'error');
+      return;
+    }
+
+    setLoadingAction(action === 'start' ? 'auto-start' : 'auto-stop');
+    addLog(`${action === 'start' ? 'Starting' : 'Stopping'} Match Bot...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/auto_start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, team_code: teamCode })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error);
+      
+      setIsAutoStarting(action === 'start');
+      addLog(`✅ Match Bot ${action === 'start' ? 'Started' : 'Stopped'}!`, 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const sendGroupInvite = async (limit) => {
+    setLoadingAction(`group-${limit}`);
+    addLog(`Sending ${limit}-Player Group Invitation...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/group_invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit, target_uid: targetUid })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error);
+      
+      addLog(`✅ Successfully sent ${limit}-player invitation!`, 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="glow-circle top-left"></div>
@@ -56,6 +122,10 @@ function App() {
       <header className="header">
         <h1 className="title">NIKI <span className="highlight">BOT</span></h1>
         <p className="subtitle">Premium Emote Control System</p>
+        <div className="status-bar">
+          <span className={`status-dot ${botCount > 0 ? 'online' : 'offline'}`}></span>
+          {botCount} Bots Online
+        </div>
       </header>
 
       <main className="main-content">
@@ -86,13 +156,56 @@ function App() {
             <label className="checkbox-label">
               <input type="checkbox" defaultChecked />
               <span className="checkbox-custom"></span>
-              Auto Leave (Millisecond Mode)
+              Auto Leave
             </label>
             <label className="checkbox-label">
               <input type="checkbox" />
               <span className="checkbox-custom"></span>
-              Lag Mode (Anti-Ban)
+              Triple Packet
             </label>
+          </div>
+        </div>
+
+        <div className="features-panel glass-panel">
+          <h2 className="panel-title">Bot Features</h2>
+          
+          <div className="feature-group">
+            <label>Match Bot (Auto Start)</label>
+            <div className="button-row">
+              {!isAutoStarting ? (
+                <button 
+                  className="action-btn start" 
+                  onClick={() => handleAutoStart('start')}
+                  disabled={loadingAction !== null}
+                >
+                  {loadingAction === 'auto-start' ? 'Starting...' : 'Start Match Bot'}
+                </button>
+              ) : (
+                <button 
+                  className="action-btn stop" 
+                  onClick={() => handleAutoStart('stop')}
+                  disabled={loadingAction !== null}
+                >
+                  {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="feature-group">
+            <label>Group Generator</label>
+            <div className="grid-buttons">
+              {[3, 4, 5, 6].map(num => (
+                <button 
+                  key={num}
+                  className="num-btn"
+                  onClick={() => sendGroupInvite(num)}
+                  disabled={loadingAction !== null}
+                >
+                  {loadingAction === `group-${num}` ? '...' : `${num}P`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
