@@ -118,6 +118,21 @@ function App() {
     }
   };
 
+  const handleLeave = async () => {
+    setLoadingAction('leave');
+    addLog('Requesting Bot to Leave Squad...', 'warning');
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/leave', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error);
+      addLog('✅ Exit command sent!', 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="glow-circle top-left"></div>
@@ -210,6 +225,13 @@ function App() {
                   {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
                 </button>
               )}
+              <button 
+                className="action-btn exit" 
+                onClick={handleLeave}
+                disabled={loadingAction !== null}
+              >
+                {loadingAction === 'leave' ? 'Leaving...' : 'Exit Group'}
+              </button>
             </div>
           </div>
 
