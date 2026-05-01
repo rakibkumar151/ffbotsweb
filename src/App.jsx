@@ -54,8 +54,8 @@ function App() {
       <div className="glow-circle bottom-right"></div>
       
       <header className="header">
-        <h1 className="title">B25 <span className="highlight">CHEATS</span></h1>
-        <p className="subtitle">Advanced Fast Emote System</p>
+        <h1 className="title">NIKI <span className="highlight">BOT</span></h1>
+        <p className="subtitle">Premium Emote Control System</p>
       </header>
 
       <main className="main-content">

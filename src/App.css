@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
 :root {
-  --bg-color: #050505;
-  --panel-bg: rgba(20, 20, 25, 0.6);
-  --primary: #00f0ff;
-  --primary-glow: rgba(0, 240, 255, 0.4);
-  --secondary: #7000ff;
-  --text-main: #ffffff;
-  --text-muted: #a0a0b0;
-  --danger: #ff2a2a;
-  --success: #00e676;
-  --warning: #ffb300;
-  --border: rgba(255, 255, 255, 0.08);
+  --bg-color: #030303;
+  --panel-bg: rgba(15, 15, 20, 0.7);
+  --primary: #c026d3;
+  --primary-glow: rgba(192, 38, 211, 0.5);
+  --secondary: #2dd4bf;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --border: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -45,19 +45,19 @@ body {
 }
 
 .glow-circle.top-left {
-  width: 400px;
-  height: 400px;
+  width: 500px;
+  height: 500px;
   background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
-  top: -100px;
-  left: -100px;
+  top: -150px;
+  left: -150px;
 }
 
 .glow-circle.bottom-right {
-  width: 500px;
-  height: 500px;
+  width: 600px;
+  height: 600px;
   background: radial-gradient(circle, var(--secondary) 0%, transparent 70%);
-  bottom: -200px;
-  right: -100px;
+  bottom: -250px;
+  right: -150px;
 }
 
 /* Typography */
@@ -305,9 +305,9 @@ input[type="text"]:focus {
 }
 
 .emote-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.2);
-  border-color: rgba(0, 240, 255, 0.3);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px -10px rgba(192, 38, 211, 0.3);
+  border-color: var(--primary);
 }
 
 .emote-icon {
@@ -317,21 +317,22 @@ input[type="text"]:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle, rgba(0,240,255,0.1) 0%, transparent 70%);
-  border-radius: 12px;
-  padding: 0.5rem;
+  background: radial-gradient(circle, rgba(192, 38, 211, 0.15) 0%, transparent 75%);
+  border-radius: 16px;
+  padding: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .emote-icon img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4));
-  transition: transform 0.3s ease;
+  filter: drop-shadow(0 0 12px rgba(192, 38, 211, 0.5));
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .emote-card:hover .emote-icon img {
-  transform: scale(1.1);
+  transform: scale(1.15) rotate(5deg);
 }
 
 .emote-info h3 {
