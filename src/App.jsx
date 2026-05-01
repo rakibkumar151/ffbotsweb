@@ -10,6 +10,8 @@ function App() {
   const [isAutoStarting, setIsAutoStarting] = useState(false);
   const [loadingAction, setLoadingAction] = useState(null);
   const [botCount, setBotCount] = useState(0);
+  const [autoLeave, setAutoLeave] = useState(true);
+  const [triplePacket, setTriplePacket] = useState(false);
 
   useEffect(() => {
     const fetchBots = async () => {
@@ -48,7 +50,9 @@ function App() {
         body: JSON.stringify({
           team_code: teamCode,
           target_uids: targetUids.filter(uid => uid.trim() !== ''),
-          emote_id: emote.id
+          emote_id: emote.id,
+          auto_leave: autoLeave,
+          triple_packet: triplePacket
         })
       });
       
@@ -163,14 +167,22 @@ function App() {
 
           <div className="settings-row">
             <label className="checkbox-label">
-              <input type="checkbox" defaultChecked />
+              <input 
+                type="checkbox" 
+                checked={autoLeave} 
+                onChange={(e) => setAutoLeave(e.target.checked)} 
+              />
               <span className="checkbox-custom"></span>
               Auto Leave
             </label>
             <label className="checkbox-label">
-              <input type="checkbox" />
+              <input 
+                type="checkbox" 
+                checked={triplePacket}
+                onChange={(e) => setTriplePacket(e.target.checked)}
+              />
               <span className="checkbox-custom"></span>
-              Triple Packet
+              Triple Packet (100% Rate)
             </label>
           </div>
         </div>
