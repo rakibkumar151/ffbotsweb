@@ -10,8 +10,6 @@ function App() {
   const [isAutoStarting, setIsAutoStarting] = useState(false);
   const [loadingAction, setLoadingAction] = useState(null);
   const [botCount, setBotCount] = useState(0);
-  const [autoLeave, setAutoLeave] = useState(true);
-  const [triplePacket, setTriplePacket] = useState(false);
 
   useEffect(() => {
     const fetchBots = async () => {
@@ -50,9 +48,7 @@ function App() {
         body: JSON.stringify({
           team_code: teamCode,
           target_uids: targetUids.filter(uid => uid.trim() !== ''),
-          emote_id: emote.id,
-          auto_leave: autoLeave,
-          triple_packet: triplePacket
+          emote_id: emote.id
         })
       });
       
@@ -118,21 +114,6 @@ function App() {
     }
   };
 
-  const handleLeave = async () => {
-    setLoadingAction('leave');
-    addLog('Requesting Bot to Leave Squad...', 'warning');
-    try {
-      const response = await fetch('https://ffbots-1.onrender.com/api/leave', { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error);
-      addLog('✅ Exit command sent!', 'success');
-    } catch (error) {
-      addLog(`❌ Error: ${error.message}`, 'error');
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-
   return (
     <div className="app-container">
       <div className="glow-circle top-left"></div>
@@ -182,22 +163,14 @@ function App() {
 
           <div className="settings-row">
             <label className="checkbox-label">
-              <input 
-                type="checkbox" 
-                checked={autoLeave} 
-                onChange={(e) => setAutoLeave(e.target.checked)} 
-              />
+              <input type="checkbox" defaultChecked />
               <span className="checkbox-custom"></span>
               Auto Leave
             </label>
             <label className="checkbox-label">
-              <input 
-                type="checkbox" 
-                checked={triplePacket}
-                onChange={(e) => setTriplePacket(e.target.checked)}
-              />
+              <input type="checkbox" />
               <span className="checkbox-custom"></span>
-              Triple Packet (100% Rate)
+              Triple Packet
             </label>
           </div>
         </div>
@@ -225,13 +198,6 @@ function App() {
                   {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
                 </button>
               )}
-              <button 
-                className="action-btn exit" 
-                onClick={handleLeave}
-                disabled={loadingAction !== null}
-              >
-                {loadingAction === 'leave' ? 'Leaving...' : 'Exit Group'}
-              </button>
             </div>
           </div>
 

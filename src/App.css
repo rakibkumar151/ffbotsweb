@@ -512,18 +512,6 @@ input[type="text"]:focus {
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
 }
 
-.action-btn.exit {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--border);
-  color: white;
-}
-
-.action-btn.exit:hover:not(:disabled) {
-  background: white;
-  color: black;
-  box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
-}
-
 .grid-buttons {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
