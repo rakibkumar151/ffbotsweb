@@ -15,6 +15,27 @@ function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [currentMenu, setCurrentMenu] = useState('emote'); // 'emote' or 'levelup'
+  const [isLevelUpUnlocked, setIsLevelUpUnlocked] = useState(false);
+  const [levelUpPass, setLevelUpPass] = useState('');
+  const [levelUpError, setLevelUpError] = useState('');
+  const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null });
+
+  useEffect(() => {
+    let interval;
+    if (isLoggedIn && currentMenu === 'levelup') {
+      const fetchStats = async () => {
+        try {
+          const res = await fetch('https://ffbots-1.onrender.com/api/match_bot_stats', { headers: getAuthHeaders() });
+          const data = await res.json();
+          setMatchStats(data);
+        } catch (e) {}
+      };
+      fetchStats();
+      interval = setInterval(fetchStats, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isLoggedIn, currentMenu]);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('niki_bot_key');
@@ -131,6 +152,37 @@ function App() {
     }
   };
 
+  const handleLevelUpLogin = async (e) => {
+    e.preventDefault();
+    setLoadingAction('unlock');
+    setLevelUpError('');
+    try {
+      const res = await fetch('https://ffbots-1.onrender.com/api/verify_github_pass', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ password: levelUpPass })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLevelUpUnlocked(true);
+        addLog('🔓 Level Up Bot Unlocked!', 'success');
+      } else {
+        setLevelUpError(data.error || 'Invalid Password');
+      }
+    } catch (e) {
+      setLevelUpError('Server Connection Failed');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const formatRuntime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   const handleAutoStart = async (action) => {
     if (action === 'start' && !teamCode) {
       addLog('Error: Team Code required for Auto Start!', 'error');
@@ -240,155 +292,189 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <div className="glow-circle top-left"></div>
-      <div className="glow-circle bottom-right"></div>
-      
-      <header className="header">
-        <h1 className="title">NIKI <span className="highlight">BOT</span></h1>
-        <p className="subtitle">Premium Emote Control System</p>
-        <div className="status-bar">
-          <span className={`status-dot ${botCount > 0 ? 'online' : 'offline'}`}></span>
-          {botCount} Bots Online
+    <div className="app-layout">
+      <aside className="sidebar glass-panel">
+        <div className="sidebar-header">
+          <div className="logo">N</div>
+          <h3>NIKI BOT</h3>
         </div>
-      </header>
-
-      <main className="main-content">
-        <div className="control-panel glass-panel">
-          <h2 className="panel-title">Target Setup</h2>
-          
-          <div className="input-group">
-            <label>Team Code <span className="required">*</span></label>
-            <input 
-              type="text" 
-              placeholder="Enter 8-digit Team Code" 
-              value={teamCode}
-              onChange={(e) => setTeamCode(e.target.value)}
-            />
-          </div>
-
-          <div className="input-group">
-            <label>Target UIDs <span className="optional">(Multi-Target)</span></label>
-            <div className="uids-grid">
-              {targetUids.map((uid, idx) => (
-                <input 
-                  key={idx}
-                  type="text" 
-                  placeholder={`UID ${idx + 1}`} 
-                  value={uid}
-                  onChange={(e) => {
-                    const newUids = [...targetUids];
-                    newUids[idx] = e.target.value;
-                    setTargetUids(newUids);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="settings-row">
-            <label className="checkbox-label">
-              <input type="checkbox" defaultChecked />
-              <span className="checkbox-custom"></span>
-              Auto Leave
-            </label>
-            <label className="checkbox-label">
-              <input type="checkbox" />
-              <span className="checkbox-custom"></span>
-              Triple Packet
-            </label>
+        <nav className="nav-menu">
+          <button 
+            className={`nav-item ${currentMenu === 'emote' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('emote')}
+          >
+            <span className="icon">🎭</span> Emote Control
+          </button>
+          <button 
+            className={`nav-item ${currentMenu === 'levelup' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('levelup')}
+          >
+            <span className="icon">⚡</span> Level Up Bot
+          </button>
+        </nav>
+        <div className="sidebar-footer">
+          <div className="bot-indicator">
+            <span className={`status-dot ${botCount > 0 ? 'online' : 'offline'}`}></span>
+            {botCount} Bots
           </div>
         </div>
+      </aside>
 
-        <div className="features-panel glass-panel">
-          <h2 className="panel-title">Bot Features</h2>
-          
-          <div className="feature-group">
-            <label>Match Bot (Auto Start)</label>
-            <div className="button-row">
-              {!isAutoStarting ? (
-                <button 
-                  className="action-btn start" 
-                  onClick={() => handleAutoStart('start')}
-                  disabled={loadingAction !== null}
-                >
-                  {loadingAction === 'auto-start' ? 'Starting...' : 'Start Match Bot'}
-                </button>
-              ) : (
-                <button 
-                  className="action-btn stop" 
-                  onClick={() => handleAutoStart('stop')}
-                  disabled={loadingAction !== null}
-                >
-                  {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
-                </button>
-              )}
-            </div>
-          </div>
+      <main className="app-container">
+        <div className="glow-circle top-left"></div>
+        <div className="glow-circle bottom-right"></div>
+        
+        <header className="header">
+          <h1 className="title">
+            {currentMenu === 'emote' ? 'EMOTE' : 'LEVEL UP'} <span className="highlight">PORTAL</span>
+          </h1>
+          <p className="subtitle">
+            {currentMenu === 'emote' ? 'Premium Emote Control System' : 'Automated Level Farming System'}
+          </p>
+        </header>
 
-          <div className="feature-group">
-            <label>Group Generator</label>
-            <div className="grid-buttons">
-              {[3, 4, 5, 6].map(num => (
-                <button 
-                  key={num}
-                  className="num-btn"
-                  onClick={() => sendGroupInvite(num)}
-                  disabled={loadingAction !== null}
-                >
-                  {loadingAction === `group-${num}` ? '...' : `${num}P`}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="terminal-panel glass-panel">
-          <div className="terminal-header">
-            <div className="dots"><span></span><span></span><span></span></div>
-            <span className="terminal-title">System Logs</span>
-          </div>
-          <div className="terminal-body">
-            {logs.length === 0 ? (
-              <div className="log empty">Awaiting commands...</div>
-            ) : (
-              logs.map((log, idx) => (
-                <div key={idx} className={`log ${log.type}`}>
-                  <span className="time">[{log.time}]</span> {log.msg}
+        {currentMenu === 'emote' ? (
+          <div className="menu-content">
+            <div className="main-content">
+              <div className="control-panel glass-panel">
+                <h2 className="panel-title">Target Setup</h2>
+                <div className="input-group">
+                  <label>Team Code <span className="required">*</span></label>
+                  <input type="text" placeholder="Enter Team Code" value={teamCode} onChange={(e) => setTeamCode(e.target.value)} />
                 </div>
-              ))
+                <div className="input-group">
+                  <label>Target UIDs <span className="optional">(Multi-Target)</span></label>
+                  <div className="uids-grid">
+                    {targetUids.map((uid, idx) => (
+                      <input key={idx} type="text" placeholder={`UID ${idx + 1}`} value={uid} onChange={(e) => {
+                        const n = [...targetUids]; n[idx] = e.target.value; setTargetUids(n);
+                      }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="terminal-panel glass-panel">
+                <div className="terminal-header">
+                  <div className="dots"><span></span><span></span><span></span></div>
+                  <span className="terminal-title">System Logs</span>
+                </div>
+                <div className="terminal-body">
+                  {logs.length === 0 ? <div className="log empty">Awaiting commands...</div> : logs.map((log, idx) => (
+                    <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <section className="emotes-section">
+              <h2 className="section-title">Available Emotes <span className="badge">{EMOTES.length}</span></h2>
+              <div className="emotes-grid">
+                {EMOTES.map(emote => (
+                  <div key={emote.id} className="emote-card glass-panel">
+                    <div className="emote-icon">
+                      <img src={`https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${emote.id}.png`} alt={emote.label} />
+                    </div>
+                    <div className="emote-info"><h3>{emote.label}</h3><p>ID: {emote.id}</p></div>
+                    <button className={`send-btn ${loadingEmote === emote.name ? 'loading' : ''}`} onClick={() => sendEmote(emote)} disabled={loadingEmote !== null}>
+                      {loadingEmote === emote.name ? 'Sending...' : 'Send Emote'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="menu-content">
+            {!isLevelUpUnlocked ? (
+              <div className="unlock-screen glass-panel">
+                <div className="lock-icon">🔒</div>
+                <h2>Level Up Bot Locked</h2>
+                <p>Please enter the GitHub-protected password to access this feature.</p>
+                <form onSubmit={handleLevelUpLogin}>
+                  <input 
+                    type="password" 
+                    placeholder="Enter Level-Up Password" 
+                    value={levelUpPass} 
+                    onChange={(e) => setLevelUpPass(e.target.value)}
+                  />
+                  {levelUpError && <p className="error-msg">{levelUpError}</p>}
+                  <button type="submit" disabled={loadingAction === 'unlock'}>
+                    {loadingAction === 'unlock' ? 'Verifying...' : 'Unlock Features'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="levelup-dashboard">
+                <div className="stats-grid">
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Active Bot</span>
+                    <span className="stat-value">{matchStats.bot_uid || 'None'}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Games Played</span>
+                    <span className="stat-value">{matchStats.games_played}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Total Runtime</span>
+                    <span className="stat-value">{formatRuntime(matchStats.runtime)}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Status</span>
+                    <span className={`stat-value ${matchStats.running ? 'online' : 'offline'}`}>
+                      {matchStats.running ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="main-content">
+                  <div className="control-panel glass-panel">
+                    <h2 className="panel-title">Match Bot Controls</h2>
+                    <div className="input-group">
+                      <label>Auto-Start Team Code</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter 8-digit Code" 
+                        value={teamCode} 
+                        onChange={(e) => setTeamCode(e.target.value)} 
+                        disabled={matchStats.running}
+                      />
+                    </div>
+                    <div className="button-row">
+                      {!matchStats.running ? (
+                        <button className="action-btn start" onClick={() => handleAutoStart('start')} disabled={loadingAction !== null}>
+                          {loadingAction === 'auto-start' ? 'Starting...' : 'Start Match Bot'}
+                        </button>
+                      ) : (
+                        <button className="action-btn stop" onClick={() => handleAutoStart('stop')} disabled={loadingAction !== null}>
+                          {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="terminal-panel glass-panel">
+                    <div className="terminal-header">
+                      <div className="dots"><span></span><span></span><span></span></div>
+                      <span className="terminal-title">Level Up Logs</span>
+                    </div>
+                    <div className="terminal-body">
+                      {matchStats.running ? (
+                        <div className="log success">⚡ Bot is currently farming on {matchStats.team_code}...</div>
+                      ) : (
+                        <div className="log empty">System idle. Waiting for start...</div>
+                      )}
+                      {logs.filter(l => l.msg.includes('Match Bot')).map((log, idx) => (
+                        <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-        </div>
+        )}
       </main>
-
-      <section className="emotes-section">
-        <h2 className="section-title">Available Emotes <span className="badge">{EMOTES.length}</span></h2>
-        <div className="emotes-grid">
-          {EMOTES.map(emote => (
-            <div key={emote.id} className="emote-card glass-panel">
-              <div className="emote-icon">
-                <img 
-                  src={`https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${emote.id}.png`} 
-                  alt={emote.label} 
-                  loading="lazy"
-                />
-              </div>
-              <div className="emote-info">
-                <h3>{emote.label}</h3>
-                <p>ID: {emote.id}</p>
-              </div>
-              <button 
-                className={`send-btn ${loadingEmote === emote.name ? 'loading' : ''}`}
-                onClick={() => sendEmote(emote)}
-                disabled={loadingEmote !== null}
-              >
-                {loadingEmote === emote.name ? 'Sending...' : 'Send Emote'}
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
