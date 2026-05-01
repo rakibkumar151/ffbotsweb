@@ -4,7 +4,7 @@ import { EMOTES } from './emotesData';
 
 function App() {
   const [teamCode, setTeamCode] = useState('');
-  const [targetUid, setTargetUid] = useState('');
+  const [targetUids, setTargetUids] = useState(['', '', '', '', '']);
   const [logs, setLogs] = useState([]);
   const [loadingEmote, setLoadingEmote] = useState(null);
   const [isAutoStarting, setIsAutoStarting] = useState(false);
@@ -47,7 +47,7 @@ function App() {
         },
         body: JSON.stringify({
           team_code: teamCode,
-          target_uid: targetUid,
+          target_uids: targetUids.filter(uid => uid.trim() !== ''),
           emote_id: emote.id
         })
       });
@@ -101,7 +101,7 @@ function App() {
       const response = await fetch('https://ffbots-1.onrender.com/api/group_invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit, target_uid: targetUid })
+        body: JSON.stringify({ limit, target_uid: targetUids[0] })
       });
       const data = await response.json();
       if (!response.ok || data.error) throw new Error(data.error);
@@ -143,13 +143,22 @@ function App() {
           </div>
 
           <div className="input-group">
-            <label>Target UID <span className="optional">(Optional)</span></label>
-            <input 
-              type="text" 
-              placeholder="Leave blank for self" 
-              value={targetUid}
-              onChange={(e) => setTargetUid(e.target.value)}
-            />
+            <label>Target UIDs <span className="optional">(Multi-Target)</span></label>
+            <div className="uids-grid">
+              {targetUids.map((uid, idx) => (
+                <input 
+                  key={idx}
+                  type="text" 
+                  placeholder={`UID ${idx + 1}`} 
+                  value={uid}
+                  onChange={(e) => {
+                    const newUids = [...targetUids];
+                    newUids[idx] = e.target.value;
+                    setTargetUids(newUids);
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="settings-row">
