@@ -22,7 +22,7 @@ function App() {
     addLog(`Sending ${emote.label} to Team ${teamCode}...`, 'warning');
 
     try {
-      const response = await fetch('https://ff-botf.onrender.com/api/emote', {
+      const response = await fetch('https://ffbots-1.onrender.com/api/emote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
