@@ -18,8 +18,20 @@ function App() {
 
   useEffect(() => {
     const savedKey = localStorage.getItem('niki_bot_key');
-    if (savedKey) {
-      verifyKey(savedKey);
+    const loginTime = localStorage.getItem('niki_bot_login_time');
+    
+    if (savedKey && loginTime) {
+      const oneHour = 60 * 60 * 1000;
+      const now = new Date().getTime();
+      
+      if (now - parseInt(loginTime) > oneHour) {
+        // Session expired
+        localStorage.removeItem('niki_bot_key');
+        localStorage.removeItem('niki_bot_login_time');
+        setIsLoggedIn(false);
+      } else {
+        verifyKey(savedKey);
+      }
     }
   }, []);
 
@@ -46,7 +58,9 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setIsLoggedIn(true);
+        const now = new Date().getTime();
         localStorage.setItem('niki_bot_key', data.token);
+        localStorage.setItem('niki_bot_login_time', now.toString());
       } else {
         setLoginError(data.error || 'Invalid Credentials');
       }
