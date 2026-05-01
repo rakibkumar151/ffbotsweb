@@ -10,11 +10,64 @@ function App() {
   const [isAutoStarting, setIsAutoStarting] = useState(false);
   const [loadingAction, setLoadingAction] = useState(null);
   const [botCount, setBotCount] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem('niki_bot_key');
+    if (savedKey) {
+      verifyKey(savedKey);
+    }
+  }, []);
+
+  const verifyKey = async (token) => {
+    try {
+      // In a real app, we'd verify the token. 
+      // For now, we assume if it's in localStorage, it's valid until a 401 occurs.
+      setIsLoggedIn(true);
+    } catch (e) {
+      localStorage.removeItem('niki_bot_key');
+    }
+  };
+
+  const onLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('https://ffbots-1.onrender.com/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLoggedIn(true);
+        localStorage.setItem('niki_bot_key', data.token);
+      } else {
+        setLoginError(data.error || 'Invalid Credentials');
+      }
+    } catch (e) {
+      setLoginError('Connection Error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const getAuthHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('niki_bot_key')}`
+  });
 
   useEffect(() => {
     const fetchBots = async () => {
       try {
-        const res = await fetch('https://ffbots-1.onrender.com/api/bots');
+        const res = await fetch('https://ffbots-1.onrender.com/api/bots', {
+          headers: getAuthHeaders()
+        });
         const data = await res.json();
         if (data.bots) setBotCount(data.bots.length);
       } catch (e) {
@@ -42,9 +95,7 @@ function App() {
     try {
       const response = await fetch('https://ffbots-1.onrender.com/api/emote', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           team_code: teamCode,
           target_uids: targetUids.filter(uid => uid.trim() !== ''),
@@ -78,7 +129,7 @@ function App() {
     try {
       const response = await fetch('https://ffbots-1.onrender.com/api/auto_start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ action, team_code: teamCode })
       });
       const data = await response.json();
@@ -100,7 +151,7 @@ function App() {
     try {
       const response = await fetch('https://ffbots-1.onrender.com/api/group_invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ limit, target_uid: targetUids[0] })
       });
       const data = await response.json();
@@ -113,6 +164,66 @@ function App() {
       setLoadingAction(null);
     }
   };
+
+  if (!isLoggedIn) {
+    return (
+      <div className="login-container">
+        <div className="mesh-bg"></div>
+        <div className="glow-circle top-left"></div>
+        <div className="glow-circle bottom-right"></div>
+        
+        <div className="login-card glass-panel">
+          <div className="brand-badge">PREMIUM ACCESS</div>
+          <div className="login-header">
+            <h1 className="title">NIKI <span className="highlight">BOT</span></h1>
+            <p className="subtitle">Secure Administrator Portal</p>
+          </div>
+          
+          <form onSubmit={onLoginSubmit}>
+            <div className="input-group">
+              <label>Username</label>
+              <input 
+                type="text" 
+                placeholder="Enter admin username" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Password</label>
+              <input 
+                type="password" 
+                placeholder="Enter your password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            {loginError && (
+              <div className="error-box">
+                <span>⚠️</span> {loginError}
+              </div>
+            )}
+            
+            <button 
+              type="submit" 
+              className={`login-btn ${isLoggingIn ? 'loading' : ''}`}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? 'Authenticating...' : 'Sign In'}
+            </button>
+          </form>
+          
+          <div className="login-footer">
+            <p>© 2026 NIKI BOT • All Rights Reserved</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
