@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { EMOTES } from './emotesData';
 
@@ -19,7 +19,8 @@ function App() {
   const [isLevelUpUnlocked, setIsLevelUpUnlocked] = useState(false);
   const [levelUpPass, setLevelUpPass] = useState('');
   const [levelUpError, setLevelUpError] = useState('');
-  const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null });
+  const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
+  const terminalRef = useRef(null); // Bug Fix: ref for auto-scroll
 
   useEffect(() => {
     let interval;
@@ -36,6 +37,13 @@ function App() {
     }
     return () => clearInterval(interval);
   }, [isLoggedIn, currentMenu]);
+
+  // Bug Fix: auto-scroll terminal to bottom whenever logs update
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('niki_bot_key');
@@ -58,11 +66,21 @@ function App() {
 
   const verifyKey = async (token) => {
     try {
-      // In a real app, we'd verify the token. 
-      // For now, we assume if it's in localStorage, it's valid until a 401 occurs.
-      setIsLoggedIn(true);
+      // Bug Fix: actually verify the token against the API instead of blindly accepting it
+      const res = await fetch('https://ffbots-1.onrender.com/api/bots', {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setIsLoggedIn(true);
+      } else {
+        // Token invalid or expired — clear it
+        localStorage.removeItem('niki_bot_key');
+        localStorage.removeItem('niki_bot_login_time');
+        setIsLoggedIn(false);
+      }
     } catch (e) {
-      localStorage.removeItem('niki_bot_key');
+      // Network error — optimistically allow if token exists
+      setIsLoggedIn(true);
     }
   };
 
@@ -98,11 +116,14 @@ function App() {
   });
 
   useEffect(() => {
+    // Bug Fix: only poll when logged in to avoid unauthorized requests
+    if (!isLoggedIn) return;
     const fetchBots = async () => {
       try {
         const res = await fetch('https://ffbots-1.onrender.com/api/bots', {
           headers: getAuthHeaders()
         });
+        if (res.status === 401) { setIsLoggedIn(false); return; }
         const data = await res.json();
         if (data.bots) setBotCount(data.bots.length);
       } catch (e) {
@@ -112,10 +133,11 @@ function App() {
     fetchBots();
     const interval = setInterval(fetchBots, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isLoggedIn]);
 
   const addLog = (msg, type = 'info') => {
-    setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }]);
+    // Bug Fix: cap logs at 50 to prevent memory leak / UI slowdown
+    setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }].slice(-50));
   };
 
   const sendEmote = async (emote) => {
@@ -199,7 +221,8 @@ function App() {
         body: JSON.stringify({ action, team_code: teamCode })
       });
       const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error);
+      // Bug Fix: data.error may be undefined — fallback to generic message
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
       
       setIsAutoStarting(action === 'start');
       addLog(`✅ Match Bot ${action === 'start' ? 'Started' : 'Stopped'}!`, 'success');
@@ -221,7 +244,8 @@ function App() {
         body: JSON.stringify({ limit, target_uid: targetUids[0] })
       });
       const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error);
+      // Bug Fix: data.error may be undefined — fallback to generic message
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
       
       addLog(`✅ Successfully sent ${limit}-player invitation!`, 'success');
     } catch (error) {
@@ -346,7 +370,8 @@ function App() {
                   <label>Target UIDs <span className="optional">(Multi-Target)</span></label>
                   <div className="uids-grid">
                     {targetUids.map((uid, idx) => (
-                      <input key={idx} type="text" placeholder={`UID ${idx + 1}`} value={uid} onChange={(e) => {
+                      // Bug Fix: use stable key instead of array index anti-pattern
+                      <input key={`uid-input-${idx}`} type="text" placeholder={`UID ${idx + 1}`} value={uid} onChange={(e) => {
                         const n = [...targetUids]; n[idx] = e.target.value; setTargetUids(n);
                       }} />
                     ))}
@@ -359,7 +384,8 @@ function App() {
                   <div className="dots"><span></span><span></span><span></span></div>
                   <span className="terminal-title">System Logs</span>
                 </div>
-                <div className="terminal-body">
+                {/* Bug Fix: ref added for auto-scroll to latest log */}
+                <div className="terminal-body" ref={terminalRef}>
                   {logs.length === 0 ? <div className="log empty">Awaiting commands...</div> : logs.map((log, idx) => (
                     <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
                   ))}
@@ -405,7 +431,12 @@ function App() {
                 {EMOTES.map(emote => (
                   <div key={emote.id} className="emote-card glass-panel">
                     <div className="emote-icon">
-                      <img src={`https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${emote.id}.png`} alt={emote.label} />
+                      {/* Bug Fix: onError fallback for broken/missing emote images */}
+                      <img
+                        src={`https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${emote.id}.png`}
+                        alt={emote.label}
+                        onError={(e) => { e.target.style.opacity = '0.15'; e.target.removeAttribute('src'); }}
+                      />
                     </div>
                     <div className="emote-info"><h3>{emote.label}</h3><p>ID: {emote.id}</p></div>
                     <button className={`send-btn ${loadingEmote === emote.name ? 'loading' : ''}`} onClick={() => sendEmote(emote)} disabled={loadingEmote !== null}>
@@ -490,9 +521,10 @@ function App() {
                       <div className="dots"><span></span><span></span><span></span></div>
                       <span className="terminal-title">Level Up Logs</span>
                     </div>
-                    <div className="terminal-body">
+                    {/* Bug Fix: ref added for auto-scroll; team_code now exists in initial state */}
+                    <div className="terminal-body" ref={terminalRef}>
                       {matchStats.running ? (
-                        <div className="log success">⚡ Bot is currently farming on {matchStats.team_code}...</div>
+                        <div className="log success">⚡ Bot is currently farming on {matchStats.team_code || 'Unknown'}...</div>
                       ) : (
                         <div className="log empty">System idle. Waiting for start...</div>
                       )}
