@@ -367,6 +367,38 @@ function App() {
               </div>
             </div>
 
+            {/* Group Invite Panel */}
+            <div className="group-invite-panel glass-panel">
+              <h2 className="panel-title">👥 Group Invite</h2>
+              <div className="group-invite-inner">
+                <div className="input-group" style={{flex: 1, minWidth: '200px'}}>
+                  <label>Target UID <span className="optional">(Group Invite Target)</span></label>
+                  <input
+                    type="text"
+                    placeholder="Enter Target UID"
+                    value={targetUids[0]}
+                    onChange={(e) => { const n = [...targetUids]; n[0] = e.target.value; setTargetUids(n); }}
+                  />
+                </div>
+                <div className="group-btn-wrap">
+                  <label style={{fontSize:'0.85rem', color:'var(--text-muted)', marginBottom:'0.5rem', display:'block'}}>Select Group Size</label>
+                  <div className="grid-buttons">
+                    {[3, 4, 5, 6].map(num => (
+                      <button
+                        key={num}
+                        className="num-btn"
+                        onClick={() => sendGroupInvite(num)}
+                        disabled={loadingAction !== null}
+                        title={`Send ${num}-player group invite`}
+                      >
+                        {loadingAction === `group-${num}` ? '...' : `/${num}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <section className="emotes-section">
               <h2 className="section-title">Available Emotes <span className="badge">{EMOTES.length}</span></h2>
               <div className="emotes-grid">

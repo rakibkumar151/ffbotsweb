@@ -828,3 +828,35 @@ input[type="text"]:focus {
   .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
   .nav-menu { flex-direction: row; }
 }
+
+/* Group Invite Panel */
+.group-invite-panel {
+  margin-bottom: 2rem;
+  animation: fadeIn 0.8s ease-out;
+}
+
+.group-invite-inner {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.group-btn-wrap {
+  min-width: 260px;
+}
+
+.group-btn-wrap .grid-buttons {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.num-btn {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 600px) {
+  .group-invite-inner { flex-direction: column; }
+  .group-btn-wrap { width: 100%; min-width: unset; }
+}
