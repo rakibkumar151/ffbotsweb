@@ -20,6 +20,8 @@ function App() {
   const [levelUpPass, setLevelUpPass] = useState('');
   const [levelUpError, setLevelUpError] = useState('');
   const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
+  const [botsList, setBotsList] = useState([]);
+  const [levelUpBotUid, setLevelUpBotUid] = useState(localStorage.getItem('levelUpBotUid') || '');
   const terminalRef = useRef(null); // Bug Fix: ref for auto-scroll
 
   useEffect(() => {
@@ -27,16 +29,18 @@ function App() {
     if (isLoggedIn && currentMenu === 'levelup') {
       const fetchStats = async () => {
         try {
-          const res = await fetch('https://ffbots-1.onrender.com/api/match_bot_stats', { headers: getAuthHeaders() });
+          const res = await fetch(`https://ffbots-1.onrender.com/api/match_bot_stats?bot_uid=${levelUpBotUid}`, { headers: getAuthHeaders() });
           const data = await res.json();
           setMatchStats(data);
+          if (data.running) setIsAutoStarting(true);
+          else setIsAutoStarting(false);
         } catch (e) {}
       };
-      fetchStats();
-      interval = setInterval(fetchStats, 2000);
+      if (levelUpBotUid) fetchStats();
+      interval = setInterval(() => { if (levelUpBotUid) fetchStats(); }, 2000);
     }
     return () => clearInterval(interval);
-  }, [isLoggedIn, currentMenu]);
+  }, [isLoggedIn, currentMenu, levelUpBotUid]);
 
   // Bug Fix: auto-scroll terminal to bottom whenever logs update
   useEffect(() => {
@@ -125,7 +129,10 @@ function App() {
         });
         if (res.status === 401) { setIsLoggedIn(false); return; }
         const data = await res.json();
-        if (data.bots) setBotCount(data.bots.length);
+        if (data.bots) {
+          setBotCount(data.bots.length);
+          setBotsList(data.bots);
+        }
       } catch (e) {
         console.error("Bot check failed", e);
       }
@@ -206,9 +213,16 @@ function App() {
   };
 
   const handleAutoStart = async (action) => {
-    if (action === 'start' && !teamCode) {
-      addLog('Error: Team Code required for Auto Start!', 'error');
-      return;
+    if (action === 'start') {
+      if (!teamCode) {
+        addLog('Error: Team Code required for Auto Start!', 'error');
+        return;
+      }
+      if (!levelUpBotUid) {
+        addLog('Error: Please select a Free Bot first!', 'error');
+        return;
+      }
+      localStorage.setItem('levelUpBotUid', levelUpBotUid);
     }
 
     setLoadingAction(action === 'start' ? 'auto-start' : 'auto-stop');
@@ -218,7 +232,7 @@ function App() {
       const response = await fetch('https://ffbots-1.onrender.com/api/auto_start', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ action, team_code: teamCode })
+        body: JSON.stringify({ action, team_code: teamCode, bot_uid: levelUpBotUid })
       });
       const data = await response.json();
       // Bug Fix: data.error may be undefined — fallback to generic message
@@ -493,6 +507,34 @@ function App() {
                 <div className="main-content">
                   <div className="control-panel glass-panel">
                     <h2 className="panel-title">Match Bot Controls</h2>
+                    
+                    <div className="input-group">
+                      <label>Select Free Bot UID</label>
+                      <select 
+                        value={levelUpBotUid} 
+                        onChange={(e) => setLevelUpBotUid(e.target.value)}
+                        disabled={matchStats.running}
+                        style={{
+                          padding: '12px',
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: 'white',
+                          borderRadius: '8px',
+                          outline: 'none',
+                          width: '100%',
+                          fontSize: '1rem',
+                          marginBottom: '1rem'
+                        }}
+                      >
+                        <option value="">-- Choose a Free Bot --</option>
+                        {botsList.filter(b => !b.is_level_up || b.uid === levelUpBotUid).map(b => (
+                          <option key={b.uid} value={b.uid} disabled={b.is_busy && !b.is_level_up}>
+                            {b.uid} ({b.region}) {b.is_busy && !b.is_level_up ? '- Busy' : ''} {b.is_level_up ? '- In Level Up' : '- Free'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div className="input-group">
                       <label>Auto-Start Team Code</label>
                       <input 
