@@ -10,6 +10,7 @@ function App() {
   const [isAutoStarting, setIsAutoStarting] = useState(false);
   const [loadingAction, setLoadingAction] = useState(null);
   const [botCount, setBotCount] = useState(0);
+  const [availableBots, setAvailableBots] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -19,28 +20,27 @@ function App() {
   const [isLevelUpUnlocked, setIsLevelUpUnlocked] = useState(false);
   const [levelUpPass, setLevelUpPass] = useState('');
   const [levelUpError, setLevelUpError] = useState('');
+  const [selectedBotUid, setSelectedBotUid] = useState(localStorage.getItem('level_up_bot_uid') || '');
   const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
-  const [botsList, setBotsList] = useState([]);
-  const [levelUpBotUid, setLevelUpBotUid] = useState(localStorage.getItem('levelUpBotUid') || '');
   const terminalRef = useRef(null); // Bug Fix: ref for auto-scroll
 
   useEffect(() => {
     let interval;
-    if (isLoggedIn && currentMenu === 'levelup') {
+    if (isLoggedIn && currentMenu === 'levelup' && selectedBotUid) {
       const fetchStats = async () => {
         try {
-          const res = await fetch(`https://ffbots-1.onrender.com/api/match_bot_stats?bot_uid=${levelUpBotUid}`, { headers: getAuthHeaders() });
+          const res = await fetch(`https://ffbots-1.onrender.com/api/match_bot_stats?bot_uid=${selectedBotUid}`, { headers: getAuthHeaders() });
           const data = await res.json();
           setMatchStats(data);
-          if (data.running) setIsAutoStarting(true);
-          else setIsAutoStarting(false);
         } catch (e) {}
       };
-      if (levelUpBotUid) fetchStats();
-      interval = setInterval(() => { if (levelUpBotUid) fetchStats(); }, 2000);
+      fetchStats();
+      interval = setInterval(fetchStats, 2000);
+    } else if (isLoggedIn && currentMenu === 'levelup' && !selectedBotUid) {
+      setMatchStats({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
     }
     return () => clearInterval(interval);
-  }, [isLoggedIn, currentMenu, levelUpBotUid]);
+  }, [isLoggedIn, currentMenu, selectedBotUid]);
 
   // Bug Fix: auto-scroll terminal to bottom whenever logs update
   useEffect(() => {
@@ -131,7 +131,7 @@ function App() {
         const data = await res.json();
         if (data.bots) {
           setBotCount(data.bots.length);
-          setBotsList(data.bots);
+          setAvailableBots(data.bots);
         }
       } catch (e) {
         console.error("Bot check failed", e);
@@ -213,16 +213,14 @@ function App() {
   };
 
   const handleAutoStart = async (action) => {
-    if (action === 'start') {
-      if (!teamCode) {
-        addLog('Error: Team Code required for Auto Start!', 'error');
-        return;
-      }
-      if (!levelUpBotUid) {
-        addLog('Error: Please select a Free Bot first!', 'error');
-        return;
-      }
-      localStorage.setItem('levelUpBotUid', levelUpBotUid);
+    if (action === 'start' && !teamCode) {
+      addLog('Error: Team Code required for Auto Start!', 'error');
+      return;
+    }
+    
+    if (action === 'start' && !selectedBotUid) {
+      addLog('Error: Please select a Free Bot first!', 'error');
+      return;
     }
 
     setLoadingAction(action === 'start' ? 'auto-start' : 'auto-stop');
@@ -232,7 +230,7 @@ function App() {
       const response = await fetch('https://ffbots-1.onrender.com/api/auto_start', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ action, team_code: teamCode, bot_uid: levelUpBotUid })
+        body: JSON.stringify({ action, team_code: teamCode, bot_uid: selectedBotUid })
       });
       const data = await response.json();
       // Bug Fix: data.error may be undefined — fallback to generic message
@@ -507,42 +505,33 @@ function App() {
                 <div className="main-content">
                   <div className="control-panel glass-panel">
                     <h2 className="panel-title">Match Bot Controls</h2>
-                    
                     <div className="input-group">
-                      <label>Select Free Bot UID</label>
+                      <label>Select Free Bot</label>
                       <select 
-                        value={levelUpBotUid} 
-                        onChange={(e) => setLevelUpBotUid(e.target.value)}
-                        disabled={matchStats.running}
-                        style={{
-                          padding: '12px',
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          color: 'white',
-                          borderRadius: '8px',
-                          outline: 'none',
-                          width: '100%',
-                          fontSize: '1rem',
-                          marginBottom: '1rem'
+                        value={selectedBotUid} 
+                        onChange={(e) => {
+                          setSelectedBotUid(e.target.value);
+                          localStorage.setItem('level_up_bot_uid', e.target.value);
                         }}
+                        className="bot-select"
                       >
-                        <option value="">-- Choose a Free Bot --</option>
-                        {botsList.filter(b => !b.is_level_up || b.uid === levelUpBotUid).map(b => (
-                          <option key={b.uid} value={b.uid} disabled={b.is_busy && !b.is_level_up}>
-                            {b.uid} ({b.region}) {b.is_busy && !b.is_level_up ? '- Busy' : ''} {b.is_level_up ? '- In Level Up' : '- Free'}
+                        <option value="">-- Choose a Bot --</option>
+                        {availableBots.map(b => (
+                          <option key={b.uid} value={b.uid} disabled={b.is_busy && !b.is_leveling_up}>
+                            {b.uid} {b.is_leveling_up ? '(Running - Level Up)' : b.is_busy ? '(Busy)' : '(Free)'}
                           </option>
                         ))}
                       </select>
                     </div>
-
                     <div className="input-group">
                       <label>Auto-Start Team Code</label>
                       <input 
                         type="text" 
                         placeholder="Enter 8-digit Code" 
                         value={teamCode} 
-                        onChange={(e) => setTeamCode(e.target.value)} 
-                        disabled={matchStats.running}
+                        onChange={(e) => {
+                          setTeamCode(e.target.value);
+                        }} 
                       />
                     </div>
                     <div className="button-row">
