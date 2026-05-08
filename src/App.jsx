@@ -16,12 +16,16 @@ function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [currentMenu, setCurrentMenu] = useState('emote'); // 'emote' or 'levelup'
+  const [currentMenu, setCurrentMenu] = useState('emote'); // 'emote' or 'levelup' or 'rankmode'
   const [isLevelUpUnlocked, setIsLevelUpUnlocked] = useState(false);
   const [levelUpPass, setLevelUpPass] = useState('');
   const [levelUpError, setLevelUpError] = useState('');
   const [selectedBotUid, setSelectedBotUid] = useState(localStorage.getItem('level_up_bot_uid') || '');
   const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
+  const [rankBots, setRankBots] = useState([]);
+  const [rankSessions, setRankSessions] = useState([]);
+  const [rankTeamCode, setRankTeamCode] = useState('');
+  const [rankNumBots, setRankNumBots] = useState(1);
   const terminalRef = useRef(null); // Bug Fix: ref for auto-scroll
 
   useEffect(() => {
@@ -132,6 +136,15 @@ function App() {
         if (data.bots) {
           setBotCount(data.bots.length);
           setAvailableBots(data.bots);
+        }
+        
+        const rankRes = await fetch('https://ffbots-1.onrender.com/api/rank_bots', {
+          headers: getAuthHeaders()
+        });
+        if (rankRes.ok) {
+          const rankData = await rankRes.json();
+          if (rankData.bots) setRankBots(rankData.bots);
+          if (rankData.sessions) setRankSessions(rankData.sessions);
         }
       } catch (e) {
         console.error("Bot check failed", e);
@@ -267,6 +280,28 @@ function App() {
     }
   };
 
+  const handleRankAutoStart = async (action) => {
+    setLoadingAction(action === 'start' ? 'rank-start' : 'rank-stop');
+    addLog(`Sending ${action} command to Rank Bots...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/rank_auto_start', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ action, team_code: rankTeamCode, num_bots: rankNumBots })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
+      
+      addLog(`✅ Rank Mode ${action === 'start' ? 'Started' : 'Stopped'}!`, 'success');
+      if (action === 'start') setRankTeamCode('');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="login-container">
@@ -347,6 +382,12 @@ function App() {
           >
             <span className="icon">⚡</span> Level Up Bot
           </button>
+          <button 
+            className={`nav-item ${currentMenu === 'rankmode' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('rankmode')}
+          >
+            <span className="icon">🏆</span> Rank Mode
+          </button>
         </nav>
         <div className="sidebar-footer">
           <div className="bot-indicator">
@@ -362,10 +403,10 @@ function App() {
         
         <header className="header">
           <h1 className="title">
-            {currentMenu === 'emote' ? 'EMOTE' : 'LEVEL UP'} <span className="highlight">PORTAL</span>
+            {currentMenu === 'emote' ? 'EMOTE' : currentMenu === 'levelup' ? 'LEVEL UP' : 'RANK MODE'} <span className="highlight">PORTAL</span>
           </h1>
           <p className="subtitle">
-            {currentMenu === 'emote' ? 'Premium Emote Control System' : 'Automated Level Farming System'}
+            {currentMenu === 'emote' ? 'Premium Emote Control System' : currentMenu === 'levelup' ? 'Automated Level Farming System' : 'Automated Rank Team Joins'}
           </p>
         </header>
 
@@ -459,7 +500,7 @@ function App() {
               </div>
             </section>
           </div>
-        ) : (
+        ) : currentMenu === 'levelup' ? (
           <div className="menu-content">
             {!isLevelUpUnlocked ? (
               <div className="unlock-screen glass-panel">
@@ -560,6 +601,105 @@ function App() {
                         <div className="log empty">System idle. Waiting for start...</div>
                       )}
                       {logs.filter(l => l.msg.includes('Match Bot')).map((log, idx) => (
+                        <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="menu-content">
+            {!isLevelUpUnlocked ? (
+              <div className="unlock-screen glass-panel">
+                <div className="lock-icon">🔒</div>
+                <h2>Rank Mode Locked</h2>
+                <p>Please enter the GitHub-protected password to access this feature.</p>
+                <form onSubmit={handleLevelUpLogin}>
+                  <input 
+                    type="password" 
+                    placeholder="Enter Password" 
+                    value={levelUpPass} 
+                    onChange={(e) => setLevelUpPass(e.target.value)}
+                  />
+                  {levelUpError && <p className="error-msg">{levelUpError}</p>}
+                  <button type="submit" disabled={loadingAction === 'unlock'}>
+                    {loadingAction === 'unlock' ? 'Verifying...' : 'Unlock Features'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="rankmode-dashboard">
+                <div className="stats-grid">
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Total Rank Bots</span>
+                    <span className="stat-value">{rankBots.length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Free Bots</span>
+                    <span className="stat-value">{rankBots.filter(b => !b.is_busy).length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Active Sessions</span>
+                    <span className="stat-value">{rankSessions.length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Status</span>
+                    <span className={`stat-value ${rankSessions.length > 0 ? 'online' : 'offline'}`}>
+                      {rankSessions.length > 0 ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="main-content">
+                  <div className="control-panel glass-panel">
+                    <h2 className="panel-title">Rank Bot Controls</h2>
+                    
+                    <div className="input-group">
+                      <label>Team Code</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter 8-digit Code" 
+                        value={rankTeamCode} 
+                        onChange={(e) => setRankTeamCode(e.target.value)} 
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>Number of Bots (Max 3)</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="3" 
+                        value={rankNumBots} 
+                        onChange={(e) => setRankNumBots(e.target.value)} 
+                        className="num-bots-input"
+                      />
+                    </div>
+                    <div className="button-row">
+                      <button className="action-btn start" onClick={() => handleRankAutoStart('start')} disabled={loadingAction !== null || rankBots.filter(b => !b.is_busy).length === 0}>
+                        {loadingAction === 'rank-start' ? 'Starting...' : 'Join & Start'}
+                      </button>
+                      <button className="action-btn stop" onClick={() => handleRankAutoStart('stop')} disabled={loadingAction !== null || rankSessions.length === 0}>
+                        {loadingAction === 'rank-stop' ? 'Stopping...' : 'Stop All Sessions'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="terminal-panel glass-panel">
+                    <div className="terminal-header">
+                      <div className="dots"><span></span><span></span><span></span></div>
+                      <span className="terminal-title">Rank Mode Logs</span>
+                    </div>
+                    <div className="terminal-body" ref={terminalRef}>
+                      {rankSessions.length > 0 ? (
+                        rankSessions.map((s, idx) => (
+                          <div key={idx} className="log success">⚡ {s.bots.length} Bots active in {s.team_code} (Running for {s.runtime}s)</div>
+                        ))
+                      ) : (
+                        <div className="log empty">System idle. Waiting for rank start...</div>
+                      )}
+                      {logs.filter(l => l.msg.includes('Rank')).map((log, idx) => (
                         <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
                       ))}
                     </div>
