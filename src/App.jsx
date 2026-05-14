@@ -1,150 +1,713 @@
-
-import React, { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { EMOTES } from './emotesData';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('player-info');
-  const [uid, setUid] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [teamCode, setTeamCode] = useState('');
+  const [targetUids, setTargetUids] = useState(['', '', '', '', '']);
+  const [logs, setLogs] = useState([]);
+  const [loadingEmote, setLoadingEmote] = useState(null);
+  const [isAutoStarting, setIsAutoStarting] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [botCount, setBotCount] = useState(0);
+  const [availableBots, setAvailableBots] = useState([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [currentMenu, setCurrentMenu] = useState('emote'); // 'emote' or 'levelup' or 'rankmode'
+  const [isLevelUpUnlocked, setIsLevelUpUnlocked] = useState(false);
+  const [levelUpPass, setLevelUpPass] = useState('');
+  const [levelUpError, setLevelUpError] = useState('');
+  const [selectedBotUid, setSelectedBotUid] = useState(localStorage.getItem('level_up_bot_uid') || '');
+  const [matchStats, setMatchStats] = useState({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
+  const [rankBots, setRankBots] = useState([]);
+  const [rankSessions, setRankSessions] = useState([]);
+  const [rankTeamCode, setRankTeamCode] = useState('');
+  const [rankNumBots, setRankNumBots] = useState(1);
+  const terminalRef = useRef(null); // Bug Fix: ref for auto-scroll
 
-  const fetchInfo = async () => {
-    if (!uid) return;
-    setLoading(true);
-    setError('');
-    setData(null);
+  useEffect(() => {
+    let interval;
+    if (isLoggedIn && currentMenu === 'levelup' && selectedBotUid) {
+      const fetchStats = async () => {
+        try {
+          const res = await fetch(`https://ffbots-1.onrender.com/api/match_bot_stats?bot_uid=${selectedBotUid}`, { headers: getAuthHeaders() });
+          const data = await res.json();
+          setMatchStats(data);
+        } catch (e) {}
+      };
+      fetchStats();
+      interval = setInterval(fetchStats, 2000);
+    } else if (isLoggedIn && currentMenu === 'levelup' && !selectedBotUid) {
+      setMatchStats({ running: false, games_played: 0, runtime: 0, bot_uid: null, team_code: null });
+    }
+    return () => clearInterval(interval);
+  }, [isLoggedIn, currentMenu, selectedBotUid]);
 
+  // Bug Fix: auto-scroll terminal to bottom whenever logs update
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem('niki_bot_key');
+    const loginTime = localStorage.getItem('niki_bot_login_time');
+    
+    if (savedKey && loginTime) {
+      const oneHour = 60 * 60 * 1000;
+      const now = new Date().getTime();
+      
+      if (now - parseInt(loginTime) > oneHour) {
+        // Session expired
+        localStorage.removeItem('niki_bot_key');
+        localStorage.removeItem('niki_bot_login_time');
+        setIsLoggedIn(false);
+      } else {
+        verifyKey(savedKey);
+      }
+    }
+  }, []);
+
+  const verifyKey = async (token) => {
     try {
-      const response = await fetch(`http://localhost:8000/info/${uid}`);
-      if (!response.ok) throw new Error('UID not found or server error');
-      const result = await response.json();
-      setData(result);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      // Bug Fix: actually verify the token against the API instead of blindly accepting it
+      const res = await fetch('https://ffbots-1.onrender.com/api/bots', {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setIsLoggedIn(true);
+      } else {
+        // Token invalid or expired — clear it
+        localStorage.removeItem('niki_bot_key');
+        localStorage.removeItem('niki_bot_login_time');
+        setIsLoggedIn(false);
+      }
+    } catch (e) {
+      // Network error — optimistically allow if token exists
+      setIsLoggedIn(true);
     }
   };
 
+  const onLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('https://ffbots-1.onrender.com/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLoggedIn(true);
+        const now = new Date().getTime();
+        localStorage.setItem('niki_bot_key', data.token);
+        localStorage.setItem('niki_bot_login_time', now.toString());
+      } else {
+        setLoginError(data.error || 'Invalid Credentials');
+      }
+    } catch (e) {
+      setLoginError('Connection Error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const getAuthHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('niki_bot_key')}`
+  });
+
+  useEffect(() => {
+    // Bug Fix: only poll when logged in to avoid unauthorized requests
+    if (!isLoggedIn) return;
+    const fetchBots = async () => {
+      try {
+        const res = await fetch('https://ffbots-1.onrender.com/api/bots', {
+          headers: getAuthHeaders()
+        });
+        if (res.status === 401) { setIsLoggedIn(false); return; }
+        const data = await res.json();
+        if (data.bots) {
+          setBotCount(data.bots.length);
+          setAvailableBots(data.bots);
+        }
+        
+        const rankRes = await fetch('https://ffbots-1.onrender.com/api/rank_bots', {
+          headers: getAuthHeaders()
+        });
+        if (rankRes.ok) {
+          const rankData = await rankRes.json();
+          if (rankData.bots) setRankBots(rankData.bots);
+          if (rankData.sessions) setRankSessions(rankData.sessions);
+        }
+      } catch (e) {
+        console.error("Bot check failed", e);
+      }
+    };
+    fetchBots();
+    const interval = setInterval(fetchBots, 10000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
+  const addLog = (msg, type = 'info') => {
+    // Bug Fix: cap logs at 50 to prevent memory leak / UI slowdown
+    setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg, type }].slice(-50));
+  };
+
+  const sendEmote = async (emote) => {
+    if (!teamCode) {
+      addLog('Error: Team Code is required!', 'error');
+      return;
+    }
+
+    setLoadingEmote(emote.name);
+    addLog(`Sending ${emote.label} to Team ${teamCode}...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/emote', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          team_code: teamCode,
+          target_uids: targetUids.filter(uid => uid.trim() !== ''),
+          emote_id: emote.id
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Failed to connect to Bot Server');
+      }
+      
+      addLog(`✅ Successfully sent ${emote.label}!`, 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingEmote(null);
+    }
+  };
+
+  const handleLevelUpLogin = async (e) => {
+    e.preventDefault();
+    setLoadingAction('unlock');
+    setLevelUpError('');
+    try {
+      const res = await fetch('https://ffbots-1.onrender.com/api/verify_github_pass', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ password: levelUpPass })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLevelUpUnlocked(true);
+        addLog('🔓 Level Up Bot Unlocked!', 'success');
+      } else {
+        setLevelUpError(data.error || 'Invalid Password');
+      }
+    } catch (e) {
+      setLevelUpError('Server Connection Failed');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const formatRuntime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleAutoStart = async (action) => {
+    if (action === 'start' && !teamCode) {
+      addLog('Error: Team Code required for Auto Start!', 'error');
+      return;
+    }
+    
+    if (action === 'start' && !selectedBotUid) {
+      addLog('Error: Please select a Free Bot first!', 'error');
+      return;
+    }
+
+    setLoadingAction(action === 'start' ? 'auto-start' : 'auto-stop');
+    addLog(`${action === 'start' ? 'Starting' : 'Stopping'} Match Bot...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/auto_start', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ action, team_code: teamCode, bot_uid: selectedBotUid })
+      });
+      const data = await response.json();
+      // Bug Fix: data.error may be undefined — fallback to generic message
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
+      
+      setIsAutoStarting(action === 'start');
+      addLog(`✅ Match Bot ${action === 'start' ? 'Started' : 'Stopped'}!`, 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const sendGroupInvite = async (limit) => {
+    setLoadingAction(`group-${limit}`);
+    addLog(`Sending ${limit}-Player Group Invitation...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/group_invite', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ limit, target_uid: targetUids[0] })
+      });
+      const data = await response.json();
+      // Bug Fix: data.error may be undefined — fallback to generic message
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
+      
+      addLog(`✅ Successfully sent ${limit}-player invitation!`, 'success');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleRankAutoStart = async (action) => {
+    setLoadingAction(action === 'start' ? 'rank-start' : 'rank-stop');
+    addLog(`Sending ${action} command to Rank Bots...`, 'warning');
+
+    try {
+      const response = await fetch('https://ffbots-1.onrender.com/api/rank_auto_start', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ action, team_code: rankTeamCode, num_bots: rankNumBots })
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Request failed');
+      
+      addLog(`✅ Rank Mode ${action === 'start' ? 'Started' : 'Stopped'}!`, 'success');
+      if (action === 'start') setRankTeamCode('');
+    } catch (error) {
+      addLog(`❌ Error: ${error.message}`, 'error');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div className="login-container">
+        <div className="mesh-bg"></div>
+        <div className="glow-circle top-left"></div>
+        <div className="glow-circle bottom-right"></div>
+        
+        <div className="login-card glass-panel">
+          <div className="brand-badge">PREMIUM ACCESS</div>
+          <div className="login-header">
+            <h1 className="title">NIKI <span className="highlight">BOT</span></h1>
+            <p className="subtitle">Secure Administrator Portal</p>
+          </div>
+          
+          <form onSubmit={onLoginSubmit}>
+            <div className="input-group">
+              <label>Username</label>
+              <input 
+                type="text" 
+                placeholder="Enter admin username" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Password</label>
+              <input 
+                type="password" 
+                placeholder="Enter your password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            {loginError && (
+              <div className="error-box">
+                <span>⚠️</span> {loginError}
+              </div>
+            )}
+            
+            <button 
+              type="submit" 
+              className={`login-btn ${isLoggingIn ? 'loading' : ''}`}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? 'Authenticating...' : 'Sign In'}
+            </button>
+          </form>
+          
+          <div className="login-footer">
+            <p>© 2026 NIKI BOT • All Rights Reserved</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="dashboard">
-      {/* Sidebar Navigation */}
-      <aside className="sidebar glass">
-        <div className="logo fire-text">FF PREMIUM</div>
-        <nav>
-          <div 
-            className={`nav-item ${activeTab === 'player-info' ? 'active' : ''}`}
-            onClick={() => setActiveTab('player-info')}
+    <div className="app-layout">
+      <aside className="sidebar glass-panel">
+        <div className="sidebar-header">
+          <div className="logo">N</div>
+          <h3>NIKI BOT</h3>
+        </div>
+        <nav className="nav-menu">
+          <button 
+            className={`nav-item ${currentMenu === 'emote' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('emote')}
           >
-            👤 PLAYER INFO
-          </div>
-          <div 
-            className={`nav-item ${activeTab === 'emotes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('emotes')}
+            <span className="icon">🎭</span> Emote Control
+          </button>
+          <button 
+            className={`nav-item ${currentMenu === 'levelup' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('levelup')}
           >
-            🎭 EMOTES LIST
-          </div>
-          <div className="nav-item">📈 RANK MODES</div>
-          <div className="nav-item">⚙️ SETTINGS</div>
+            <span className="icon">⚡</span> Level Up Bot
+          </button>
+          <button 
+            className={`nav-item ${currentMenu === 'rankmode' ? 'active' : ''}`}
+            onClick={() => setCurrentMenu('rankmode')}
+          >
+            <span className="icon">🏆</span> Rank Mode
+          </button>
         </nav>
+        <div className="sidebar-footer">
+          <div className="bot-indicator">
+            <span className={`status-dot ${botCount > 0 ? 'online' : 'offline'}`}></span>
+            {botCount} Bots
+          </div>
+        </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="content">
-        {activeTab === 'player-info' && (
-          <section className="player-info-section">
-            <header style={{ marginBottom: '30px' }}>
-              <h1 className="neon-text">Player Profile Viewer</h1>
-              <p style={{ color: '#aaa' }}>Enter UID to get full account details directly from server</p>
-            </header>
+      <main className="app-container">
+        <div className="glow-circle top-left"></div>
+        <div className="glow-circle bottom-right"></div>
+        
+        <header className="header">
+          <h1 className="title">
+            {currentMenu === 'emote' ? 'EMOTE' : currentMenu === 'levelup' ? 'LEVEL UP' : 'RANK MODE'} <span className="highlight">PORTAL</span>
+          </h1>
+          <p className="subtitle">
+            {currentMenu === 'emote' ? 'Premium Emote Control System' : currentMenu === 'levelup' ? 'Automated Level Farming System' : 'Automated Rank Team Joins'}
+          </p>
+        </header>
 
-            <div className="glass search-box" style={{ padding: '30px', marginBottom: '30px' }}>
-              <div style={{ display: 'flex', gap: '15px' }}>
-                <input 
-                  type="text" 
-                  placeholder="Enter UID (e.g. 2545042710)" 
-                  value={uid}
-                  onChange={(e) => setUid(e.target.value)}
-                />
-                <button onClick={fetchInfo} disabled={loading} style={{ minWidth: '150px' }}>
-                  {loading ? 'FETCHING...' : 'SEARCH UID'}
-                </button>
-              </div>
-              {error && <p style={{ color: '#ff4b2b', marginTop: '15px' }}>❌ {error}</p>}
-            </div>
-
-            {loading && (
-              <div className="spinner-container">
-                <div className="spinner"></div>
-                <p>Establishing Secure Session...</p>
-              </div>
-            )}
-
-            {data && (
-              <div className="glass result-card fadeIn">
-                <div className="result-header">
-                  <div>
-                    <h2 className="fire-text">{data.name || 'Unknown'}</h2>
-                    <p style={{ color: '#888' }}>UID: {uid} | Region: {data.region || 'IND'}</p>
-                  </div>
-                  <div className="level-badge glass neon-border">
-                    LVL {data.level || '??'}
+        {currentMenu === 'emote' ? (
+          <div className="menu-content">
+            <div className="main-content">
+              <div className="control-panel glass-panel">
+                <h2 className="panel-title">Target Setup</h2>
+                <div className="input-group">
+                  <label>Team Code <span className="required">*</span></label>
+                  <input type="text" placeholder="Enter Team Code" value={teamCode} onChange={(e) => setTeamCode(e.target.value)} />
+                </div>
+                <div className="input-group">
+                  <label>Target UIDs <span className="optional">(Multi-Target)</span></label>
+                  <div className="uids-grid">
+                    {targetUids.map((uid, idx) => (
+                      // Bug Fix: use stable key instead of array index anti-pattern
+                      <input key={`uid-input-${idx}`} type="text" placeholder={`UID ${idx + 1}`} value={uid} onChange={(e) => {
+                        const n = [...targetUids]; n[idx] = e.target.value; setTargetUids(n);
+                      }} />
+                    ))}
                   </div>
                 </div>
+              </div>
 
+              <div className="terminal-panel glass-panel">
+                <div className="terminal-header">
+                  <div className="dots"><span></span><span></span><span></span></div>
+                  <span className="terminal-title">System Logs</span>
+                </div>
+                {/* Bug Fix: ref added for auto-scroll to latest log */}
+                <div className="terminal-body" ref={terminalRef}>
+                  {logs.length === 0 ? <div className="log empty">Awaiting commands...</div> : logs.map((log, idx) => (
+                    <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Group Invite Panel */}
+            <div className="group-invite-panel glass-panel">
+              <h2 className="panel-title">👥 Group Invite</h2>
+              <div className="group-invite-inner">
+                <div className="input-group" style={{flex: 1, minWidth: '200px'}}>
+                  <label>Target UID <span className="optional">(Group Invite Target)</span></label>
+                  <input
+                    type="text"
+                    placeholder="Enter Target UID"
+                    value={targetUids[0]}
+                    onChange={(e) => { const n = [...targetUids]; n[0] = e.target.value; setTargetUids(n); }}
+                  />
+                </div>
+                <div className="group-btn-wrap">
+                  <label style={{fontSize:'0.85rem', color:'var(--text-muted)', marginBottom:'0.5rem', display:'block'}}>Select Group Size</label>
+                  <div className="grid-buttons">
+                    {[3, 4, 5, 6].map(num => (
+                      <button
+                        key={num}
+                        className="num-btn"
+                        onClick={() => sendGroupInvite(num)}
+                        disabled={loadingAction !== null}
+                        title={`Send ${num}-player group invite`}
+                      >
+                        {loadingAction === `group-${num}` ? '...' : `/${num}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <section className="emotes-section">
+              <h2 className="section-title">Available Emotes <span className="badge">{EMOTES.length}</span></h2>
+              <div className="emotes-grid">
+                {EMOTES.map(emote => (
+                  <div key={emote.id} className="emote-card glass-panel">
+                    <div className="emote-icon">
+                      {/* Bug Fix: onError fallback for broken/missing emote images */}
+                      <img
+                        src={`https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${emote.id}.png`}
+                        alt={emote.label}
+                        onError={(e) => { e.target.style.opacity = '0.15'; e.target.removeAttribute('src'); }}
+                      />
+                    </div>
+                    <div className="emote-info"><h3>{emote.label}</h3><p>ID: {emote.id}</p></div>
+                    <button className={`send-btn ${loadingEmote === emote.name ? 'loading' : ''}`} onClick={() => sendEmote(emote)} disabled={loadingEmote !== null}>
+                      {loadingEmote === emote.name ? 'Sending...' : 'Send Emote'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : currentMenu === 'levelup' ? (
+          <div className="menu-content">
+            {!isLevelUpUnlocked ? (
+              <div className="unlock-screen glass-panel">
+                <div className="lock-icon">🔒</div>
+                <h2>Level Up Bot Locked</h2>
+                <p>Please enter the GitHub-protected password to access this feature.</p>
+                <form onSubmit={handleLevelUpLogin}>
+                  <input 
+                    type="password" 
+                    placeholder="Enter Level-Up Password" 
+                    value={levelUpPass} 
+                    onChange={(e) => setLevelUpPass(e.target.value)}
+                  />
+                  {levelUpError && <p className="error-msg">{levelUpError}</p>}
+                  <button type="submit" disabled={loadingAction === 'unlock'}>
+                    {loadingAction === 'unlock' ? 'Verifying...' : 'Unlock Features'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="levelup-dashboard">
                 <div className="stats-grid">
-                  <div className="stat-box">
-                    <span className="stat-label">LIKES</span>
-                    <span className="stat-value">❤️ {data.likes || '0'}</span>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Active Bot</span>
+                    <span className="stat-value">{matchStats.bot_uid || 'None'}</span>
                   </div>
-                  <div className="stat-box">
-                    <span className="stat-label">HONOR SCORE</span>
-                    <span className="stat-value">⭐ {data.honor || '100'}</span>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Games Played</span>
+                    <span className="stat-value">{matchStats.games_played}</span>
                   </div>
-                  <div className="stat-box">
-                    <span className="stat-label">EXP</span>
-                    <span className="stat-value">⚡ {data.exp || '0'}</span>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Total Runtime</span>
+                    <span className="stat-value">{formatRuntime(matchStats.runtime)}</span>
                   </div>
-                  <div className="stat-box">
-                    <span className="stat-label">BR RANK</span>
-                    <span className="stat-value">🏆 {data.br_rank || 'Bronze'}</span>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Status</span>
+                    <span className={`stat-value ${matchStats.running ? 'online' : 'offline'}`}>
+                      {matchStats.running ? 'RUNNING' : 'STOPPED'}
+                    </span>
                   </div>
-                  <div className="stat-box">
-                    <span className="stat-label">CS POINTS</span>
-                    <span className="stat-value">🔫 {data.cs_points || '0'}</span>
+                </div>
+
+                <div className="main-content">
+                  <div className="control-panel glass-panel">
+                    <h2 className="panel-title">Match Bot Controls</h2>
+                    <div className="input-group">
+                      <label>Select Free Bot</label>
+                      <select 
+                        value={selectedBotUid} 
+                        onChange={(e) => {
+                          setSelectedBotUid(e.target.value);
+                          localStorage.setItem('level_up_bot_uid', e.target.value);
+                        }}
+                        className="bot-select"
+                      >
+                        <option value="">-- Choose a Bot --</option>
+                        {availableBots.map(b => (
+                          <option key={b.uid} value={b.uid} disabled={b.is_busy && !b.is_leveling_up}>
+                            {b.uid} {b.is_leveling_up ? '(Running - Level Up)' : b.is_busy ? '(Busy)' : '(Free)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="input-group">
+                      <label>Auto-Start Team Code</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter 8-digit Code" 
+                        value={teamCode} 
+                        onChange={(e) => {
+                          setTeamCode(e.target.value);
+                        }} 
+                      />
+                    </div>
+                    <div className="button-row">
+                      {!matchStats.running ? (
+                        <button className="action-btn start" onClick={() => handleAutoStart('start')} disabled={loadingAction !== null}>
+                          {loadingAction === 'auto-start' ? 'Starting...' : 'Start Match Bot'}
+                        </button>
+                      ) : (
+                        <button className="action-btn stop" onClick={() => handleAutoStart('stop')} disabled={loadingAction !== null}>
+                          {loadingAction === 'auto-stop' ? 'Stopping...' : 'Stop Match Bot'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="stat-box">
-                    <span className="stat-label">BP LEVEL</span>
-                    <span className="stat-value">🎫 {data.bp_level || '0'}</span>
-                  </div>
-                  <div className="stat-box" style={{ gridColumn: 'span 2' }}>
-                    <span className="stat-label">BIO</span>
-                    <span className="stat-value" style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>"{data.bio || 'No Bio'}"</span>
+
+                  <div className="terminal-panel glass-panel">
+                    <div className="terminal-header">
+                      <div className="dots"><span></span><span></span><span></span></div>
+                      <span className="terminal-title">Level Up Logs</span>
+                    </div>
+                    {/* Bug Fix: ref added for auto-scroll; team_code now exists in initial state */}
+                    <div className="terminal-body" ref={terminalRef}>
+                      {matchStats.running ? (
+                        <div className="log success">⚡ Bot is currently farming on {matchStats.team_code || 'Unknown'}...</div>
+                      ) : (
+                        <div className="log empty">System idle. Waiting for start...</div>
+                      )}
+                      {logs.filter(l => l.msg.includes('Match Bot')).map((log, idx) => (
+                        <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             )}
-          </section>
-        )}
-
-        {activeTab === 'emotes' && (
-          <section className="emotes-section fadeIn">
-            <header style={{ marginBottom: '30px' }}>
-              <h1 className="neon-text">Garena Emotes List</h1>
-              <p style={{ color: '#aaa' }}>Total {EMOTES.length} emotes found in database</p>
-            </header>
-            <div className="emotes-grid">
-              {EMOTES.map(emote => (
-                <div key={emote.id} className="glass emote-card">
-                  <div className="emote-icon">🎭</div>
-                  <p className="fire-text" style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{emote.label}</p>
-                  <p style={{ fontSize: '0.7rem', color: '#666', marginTop: '5px' }}>ID: {emote.id}</p>
+          </div>
+        ) : (
+          <div className="menu-content">
+            {!isLevelUpUnlocked ? (
+              <div className="unlock-screen glass-panel">
+                <div className="lock-icon">🔒</div>
+                <h2>Rank Mode Locked</h2>
+                <p>Please enter the GitHub-protected password to access this feature.</p>
+                <form onSubmit={handleLevelUpLogin}>
+                  <input 
+                    type="password" 
+                    placeholder="Enter Password" 
+                    value={levelUpPass} 
+                    onChange={(e) => setLevelUpPass(e.target.value)}
+                  />
+                  {levelUpError && <p className="error-msg">{levelUpError}</p>}
+                  <button type="submit" disabled={loadingAction === 'unlock'}>
+                    {loadingAction === 'unlock' ? 'Verifying...' : 'Unlock Features'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="rankmode-dashboard">
+                <div className="stats-grid">
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Total Rank Bots</span>
+                    <span className="stat-value">{rankBots.length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Free Bots</span>
+                    <span className="stat-value">{rankBots.filter(b => !b.is_busy).length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Active Sessions</span>
+                    <span className="stat-value">{rankSessions.length}</span>
+                  </div>
+                  <div className="stat-card glass-panel">
+                    <span className="stat-label">Status</span>
+                    <span className={`stat-value ${rankSessions.length > 0 ? 'online' : 'offline'}`}>
+                      {rankSessions.length > 0 ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </section>
+
+                <div className="main-content">
+                  <div className="control-panel glass-panel">
+                    <h2 className="panel-title">Rank Bot Controls</h2>
+                    
+                    <div className="input-group">
+                      <label>Team Code</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter 8-digit Code" 
+                        value={rankTeamCode} 
+                        onChange={(e) => setRankTeamCode(e.target.value)} 
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>Number of Bots (Max 3)</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="3" 
+                        value={rankNumBots} 
+                        onChange={(e) => setRankNumBots(e.target.value)} 
+                        className="num-bots-input"
+                      />
+                    </div>
+                    <div className="button-row">
+                      <button className="action-btn start" onClick={() => handleRankAutoStart('start')} disabled={loadingAction !== null || rankBots.filter(b => !b.is_busy).length === 0}>
+                        {loadingAction === 'rank-start' ? 'Starting...' : 'Join & Start'}
+                      </button>
+                      <button className="action-btn stop" onClick={() => handleRankAutoStart('stop')} disabled={loadingAction !== null || rankSessions.length === 0}>
+                        {loadingAction === 'rank-stop' ? 'Stopping...' : 'Stop All Sessions'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="terminal-panel glass-panel">
+                    <div className="terminal-header">
+                      <div className="dots"><span></span><span></span><span></span></div>
+                      <span className="terminal-title">Rank Mode Logs</span>
+                    </div>
+                    <div className="terminal-body" ref={terminalRef}>
+                      {rankSessions.length > 0 ? (
+                        rankSessions.map((s, idx) => (
+                          <div key={idx} className="log success">⚡ {s.bots.length} Bots active in {s.team_code} (Running for {s.runtime}s)</div>
+                        ))
+                      ) : (
+                        <div className="log empty">System idle. Waiting for rank start...</div>
+                      )}
+                      {logs.filter(l => l.msg.includes('Rank')).map((log, idx) => (
+                        <div key={idx} className={`log ${log.type}`}><span className="time">[{log.time}]</span> {log.msg}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </main>
     </div>
